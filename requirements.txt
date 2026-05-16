@@ -1,0 +1,21 @@
+# BLACK - AI Desktop Assistant Requirements
+# Install with: pip install -r requirements.txt
+
+# Core AI (Gemini 2.5 Flash)
+google-generativeai>=0.7.0
+
+# Speech Recognition (requires PortAudio system library)
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.13       # needs: sudo apt install portaudio19-dev (Linux) | brew install portaudio (Mac)
+
+# Text-to-Speech
+pyttsx3>=2.90
+
+# Screen capture & image
+Pillow>=10.0.0
+
+# System automation (keyboard, mouse, screenshots)
+pyautogui>=0.9.54
+
+# Optional but recommended: system metrics
+psutil>=5.9.0
