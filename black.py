@@ -183,7 +183,8 @@ def grab_screen() -> str | None:
     try:
         # Try mss first (faster, more accurate)
         try:
-            import mss
+            import importlib
+            mss = importlib.import_module("mss")
             with mss.mss() as sct:
                 mon = sct.monitors[1]
                 raw = sct.grab(mon)
