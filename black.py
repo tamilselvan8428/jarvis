@@ -133,38 +133,82 @@ def _init_screen_dims():
 
 _init_screen_dims()
 
+def draw_grid(img):
+    """Overlay a labelled coordinate grid on the screenshot.
+       Grid every 64px on 1280x720 → AI reads exact coords from labels.
+    """
+    from PIL import ImageDraw, ImageFont
+    draw = ImageDraw.Draw(img, "RGBA")
+    W, H  = img.size
+    STEP  = 64
+    GCOL  = (0,   200, 255, 100)   # cyan grid lines
+    LCOL  = (255, 255,   0, 230)   # yellow labels
+    CCOL  = (255,  50,  50, 200)   # red crosshair
+
+    # grid lines
+    for x in range(0, W+1, STEP):
+        draw.line([(x,0),(x,H)], fill=GCOL, width=1)
+    for y in range(0, H+1, STEP):
+        draw.line([(0,y),(W,y)], fill=GCOL, width=1)
+
+    # labels + crosshairs
+    try:    font = ImageFont.truetype("arial.ttf", 8)
+    except: font = ImageFont.load_default()
+
+    for gy in range(0, H, STEP):
+        for gx in range(0, W, STEP):
+            cx = gx + STEP//2
+            cy = gy + STEP//2
+            # top-left label of each cell
+            draw.text((gx+2, gy+2), f"{gx},{gy}", fill=LCOL, font=font)
+            # red crosshair at cell centre
+            draw.line([(cx-6,cy),(cx+6,cy)], fill=CCOL, width=1)
+            draw.line([(cx,cy-6),(cx,cy+6)], fill=CCOL, width=1)
+
+    # bottom ruler
+    for x in range(0, W+1, STEP):
+        draw.text((x+1, H-11), str(x), fill=LCOL, font=font)
+    # right ruler
+    for y in range(0, H+1, STEP):
+        draw.text((W-28, y+1), str(y), fill=LCOL, font=font)
+
+    return img
+
+
 def grab_screen() -> str | None:
-    """Capture screen at pyautogui logical resolution → resize to 1280x720 for AI."""
+    """Capture screen → resize to 1280x720 → add coordinate grid → send to AI."""
     global _CAPT_W, _CAPT_H
     if not PIL_OK:
         return None
     try:
-        # Capture at pyautogui logical size using mss for accuracy
+        # Try mss first (faster, more accurate)
         try:
             import mss
             with mss.mss() as sct:
-                mon = sct.monitors[1]   # primary monitor
+                mon = sct.monitors[1]
                 raw = sct.grab(mon)
                 img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
         except ImportError:
-            # fallback to PIL grab
             img = ImageGrab.grab(all_screens=False)
-            # Resize to match pyautogui logical coords
             if GUI_OK:
                 pw, ph = pyautogui.size()
                 if img.size != (pw, ph):
                     img = img.resize((pw, ph), Image.LANCZOS)
 
+        # Resize to fixed 1280x720
         _CAPT_W, _CAPT_H = 1280, 720
-        img_small = img.resize((_CAPT_W, _CAPT_H), Image.LANCZOS)
+        img = img.resize((_CAPT_W, _CAPT_H), Image.LANCZOS)
+
+        # Draw coordinate grid so AI can pinpoint exact locations
+        img = draw_grid(img)
+
         buf = io.BytesIO()
-        img_small.save(buf, "PNG")
-        print(f"[SCREEN] captured={img.size} → AI={_CAPT_W}x{_CAPT_H}  pyag={_PYAG_W}x{_PYAG_H}")
+        img.save(buf, "PNG")
+        print(f"[SCREEN] {_PYAG_W}x{_PYAG_H} pyag → 1280x720 AI + grid overlay")
         return base64.b64encode(buf.getvalue()).decode()
     except Exception as e:
         print(f"[SCREEN] {e}")
         return None
-
 def scale_coords(x, y):
     """Map AI image coords (1280x720) → pyautogui logical screen coords."""
     global _PYAG_W, _PYAG_H, _CAPT_W, _CAPT_H
@@ -382,7 +426,22 @@ VOLUME:
   set_vol         {"level": 50}
   mute            {}
 
-MOUSE (give coordinates exactly as seen in the screenshot image you receive — system auto-scales to real screen):
+━━━ HOW TO USE THE COORDINATE GRID ━━━
+Every screenshot you receive has a CYAN GRID overlaid with:
+  • YELLOW labels (e.g. "128,64") at the top-left of every 64×64 cell
+  • RED CROSSHAIR at the centre of every cell  
+  • RULER numbers along the bottom (X) and right edge (Y)
+
+To click something:
+  1. Find the element in the screenshot
+  2. Read the nearest yellow grid label → that gives the cell's top-left (gx, gy)
+  3. Estimate how many pixels right/down the element centre is inside that cell
+  4. Final coordinate = (gx + offset_x,  gy + offset_y)
+  Example: button centre is in cell "768,384", about 20px right and 10px down
+           → use x=788, y=394
+Always click the exact CENTRE of buttons and input fields.
+
+MOUSE (coordinates on the 1280×720 grid image — auto-scaled to your real screen):
   click           {"x": 640, "y": 360}
   dbl_click       {"x": 640, "y": 360}
   right_click     {"x": 640, "y": 360}
