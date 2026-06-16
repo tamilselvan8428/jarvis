@@ -31,7 +31,7 @@ elif OS == "Windows":
 print("\n[2/3] Installing Python packages...")
 pip = [sys.executable, "-m", "pip", "install", "--break-system-packages"]
 packages = [
-    "google-generativeai",
+    "google-genai",
     "SpeechRecognition",
     "pyttsx3",
     "Pillow",

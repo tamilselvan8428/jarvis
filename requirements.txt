@@ -2,7 +2,7 @@
 # Install with: pip install -r requirements.txt
 
 # Core AI (Gemini 2.5 Flash)
-google-generativeai>=0.7.0
+google-genai>=1.0.0
 
 # Speech Recognition (requires PortAudio system library)
 SpeechRecognition>=3.10.0
@@ -19,3 +19,8 @@ pyautogui>=0.9.54
 
 # Optional but recommended: system metrics
 psutil>=5.9.0
+
+# Hand Gesture Virtual Mouse dependencies (optional)
+opencv-python>=4.8.0
+mediapipe>=0.10.14
+

@@ -245,37 +245,68 @@ class HandMouse:
             target_x = int(mx * SCR_W)
             target_y = int(my * SCR_H)
 
-            self._smooth_x.append(target_x)
-            self._smooth_y.append(target_y)
-            if len(self._smooth_x) > SMOOTHING:
-                self._smooth_x.pop(0); self._smooth_y.pop(0)
-            sx = int(sum(self._smooth_x) / len(self._smooth_x))
-            sy = int(sum(self._smooth_y) / len(self._smooth_y))
+            # 1. Palm-Length Normalization for distance scaling
+            palm_len = ((lm[9].x - lm[0].x)**2 + (lm[9].y - lm[0].y)**2)**0.5
+            palm_len = max(0.01, palm_len) # Prevent division by zero
+            
+            # Left Click Pinch (Index to Thumb)
+            dist_index = ((lm[8].x - lm[4].x)**2 + (lm[8].y - lm[4].y)**2)**0.5
+            norm_dist_index = dist_index / palm_len
+            
+            # Right Click Pinch (Middle to Thumb)
+            dist_middle = ((lm[12].x - lm[4].x)**2 + (lm[12].y - lm[4].y)**2)**0.5
+            norm_dist_middle = dist_middle / palm_len
+
+            # 2. Pointer Stabilizing / Freezing during click pinch
+            is_pinched = norm_dist_index < 0.35 or norm_dist_middle < 0.35
+
+            # 3. Dynamic Exponential Smoothing with Pinch Lock
+            if not hasattr(self, "_prev_x") or self._prev_x is None or self._prev_x == 0:
+                self._prev_x = target_x
+                self._prev_y = target_y
+
+            dx = target_x - self._prev_x
+            dy = target_y - self._prev_y
+            dist_moved = (dx*dx + dy*dy)**0.5
+
+            if is_pinched:
+                alpha = 0.0  # Completely freeze the mouse position during click
+            else:
+                if dist_moved < 3:
+                    alpha = 0.10
+                elif dist_moved > 40:
+                    alpha = 0.70
+                else:
+                    alpha = 0.10 + 0.60 * ((dist_moved - 3) / 37)
+
+            sx = int(alpha * target_x + (1.0 - alpha) * self._prev_x)
+            sy = int(alpha * target_y + (1.0 - alpha) * self._prev_y)
+
+            self._prev_x = sx
+            self._prev_y = sy
             now = time.time()
 
-            # FIST — drag
-            if fingers_up == 0:
+            # FIST — drag (all closed, but not currently pinching a click)
+            if fingers_up == 0 and not is_pinched:
                 gesture = "drag"
                 if not self._drag:
                     pyautogui.mouseDown(button="left"); self._drag = True
                 pyautogui.moveTo(sx, sy, duration=0)
 
             # INDEX ONLY — move + pinch = left click
-            elif idx_up and not mid_up and not ring_up and not pinky_up:
+            elif (idx_up or norm_dist_index < 0.35) and not mid_up and not ring_up and not pinky_up:
                 gesture = "move"
                 if self._drag: pyautogui.mouseUp(button="left"); self._drag = False
                 pyautogui.moveTo(sx, sy, duration=0)
-                dist = ((lm[8].x-lm[4].x)**2 + (lm[8].y-lm[4].y)**2)**0.5
-                if dist < 0.06 and (now-self._last_click) > CLICK_COOLDOWN:
+                if norm_dist_index < 0.25 and (now-self._last_click) > CLICK_COOLDOWN:
                     pyautogui.click(sx, sy); self._last_click = now; gesture = "left_click"
 
             # MIDDLE ONLY — move + middle+thumb pinch = right click
-            elif mid_up and not idx_up and not ring_up and not pinky_up:
+            elif (mid_up or norm_dist_middle < 0.35) and not idx_up and not ring_up and not pinky_up:
                 gesture = "move_mid"
                 if self._drag: pyautogui.mouseUp(button="left"); self._drag = False
                 pyautogui.moveTo(sx, sy, duration=0)
-                mid_dist = ((lm[12].x-lm[4].x)**2 + (lm[12].y-lm[4].y)**2)**0.5
-                if mid_dist < 0.07 and (now-self._last_click) > CLICK_COOLDOWN:
+                if norm_dist_middle < 0.25 and (now-self._last_click) > CLICK_COOLDOWN:
                     pyautogui.rightClick(sx, sy); self._last_click = now; gesture = "right_click"
 
             # PEACE ✌ — scroll
@@ -316,6 +347,7 @@ class HandMouse:
         else:
             if self._drag: pyautogui.mouseUp(button="left"); self._drag = False
             self._smooth_x.clear(); self._smooth_y.clear(); self._scroll_ref = None
+            self._prev_x = None; self._prev_y = None
             cv2.putText(frame, "Show hand...", (20,50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (80,80,80), 2)
 
